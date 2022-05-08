@@ -66,6 +66,8 @@ class NazurinBot(Bot):
         reply_to = message.message_id if message else None
         if not chat_id:
             chat_id = message.chat.id
+        elif chat_id != reply_to:  # Sending to different chat, can't reply
+            reply_to = None
         try:
             if isinstance(illust, Ugoira):
                 await self.send_animation(chat_id,
@@ -108,16 +110,19 @@ class NazurinBot(Bot):
                     result['match'].groups())
 
         illust = await self.sites.handle_update(result)
-        # Forward to gallery & Save to album
-        if message and message.is_forward():
+
+        # Send / Forward to gallery & Save to album
+        # If there're multiple images, then send a new message instead of
+        # forwarding an existing one, since we currently can't forward albums correctly.
+        if message and message.is_forward(
+        ) and not illust.has_multiple_images():
             save = asyncio.create_task(message.forward(config.GALLERY_ID))
         elif not illust.has_image():
             save = asyncio.create_task(
                 self.send_message(config.GALLERY_ID, '\n'.join(urls)))
         else:
             save = asyncio.create_task(
-                self.sendIllust(illust, chat_id=config.GALLERY_ID))
-
+                self.sendIllust(illust, message, config.GALLERY_ID))
         download = asyncio.create_task(illust.download())
         await asyncio.gather(save, download)
         await self.storage.store(illust)
